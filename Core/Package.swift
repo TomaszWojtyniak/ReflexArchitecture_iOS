@@ -21,5 +21,6 @@ let package = Package(
         .executableTarget(
             name: "InventoryCLI", dependencies: ["InventoryCore", "IntrospectionKit"], swiftSettings: settings),
         .testTarget(name: "IntrospectionKitTests", dependencies: ["IntrospectionKit"], swiftSettings: settings),
+        .testTarget(name: "InventoryCLITests", dependencies: ["InventoryCLI"], swiftSettings: settings),
     ]
 )

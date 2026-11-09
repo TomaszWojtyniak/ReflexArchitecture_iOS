@@ -4,6 +4,7 @@ import InventoryCore
 struct Fixture {
     let status: Int
     let body: Data
+    var delayMs = 0  // lets a test act while a request is in flight
 }
 
 /// Answers requests from fixture files instead of the network.
@@ -29,7 +30,7 @@ final class FixtureHTTPClient: HTTPClient {
                 let body = try entry["body"].map {
                     try JSONSerialization.data(withJSONObject: $0, options: .fragmentsAllowed)
                 }
-                fixtures[key] = Fixture(status: status, body: body ?? Data())
+                fixtures[key] = Fixture(status: status, body: body ?? Data(), delayMs: entry["delayMs"] as? Int ?? 0)
             }
         }
         return fixtures
@@ -43,7 +44,12 @@ final class FixtureHTTPClient: HTTPClient {
     }
 
     func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-        guard let fixture = fixtures[Self.key(for: request)] else { throw URLError(.resourceUnavailable) }
+        let key = Self.key(for: request)
+        guard let fixture = fixtures[key] else {
+            NetworkGuard.record("missing fixture: \(key)")
+            throw URLError(.resourceUnavailable)
+        }
+        if fixture.delayMs > 0 { try await Task.sleep(for: .milliseconds(fixture.delayMs)) }
         let response = HTTPURLResponse(
             url: request.url!, statusCode: fixture.status, httpVersion: "HTTP/1.1",
             headerFields: ["Content-Type": "application/json"])!
