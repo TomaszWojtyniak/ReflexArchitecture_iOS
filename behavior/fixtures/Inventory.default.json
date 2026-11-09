@@ -1,0 +1,22 @@
+{
+  "GET /products?limit=20&select=title,stock": {
+    "status": 200,
+    "body": {
+      "products": [
+        { "id": 1, "title": "Essence Mascara Lash Princess", "stock": 99 },
+        { "id": 2, "title": "Eyeshadow Palette with Mirror", "stock": 34 },
+        { "id": 3, "title": "Powder Canister", "stock": 89 },
+        { "id": 4, "title": "Red Lipstick", "stock": 91 },
+        { "id": 5, "title": "Red Nail Polish", "stock": 79 }
+      ],
+      "total": 5,
+      "skip": 0,
+      "limit": 20
+    }
+  },
+  "PUT /products/1": { "status": 200 },
+  "PUT /products/2": { "status": 200 },
+  "PUT /products/3": { "status": 200 },
+  "PUT /products/4": { "status": 200 },
+  "PUT /products/5": { "status": 200 }
+}

@@ -1,0 +1,6 @@
+{
+  "GET /products?limit=20&select=title,stock": {
+    "status": 200,
+    "body": { "products": [{ "id": 1, "title": "Essence Mascara Lash Princess", "stock": 2 }], "total": 1, "skip": 0, "limit": 20 }
+  }
+}

@@ -1,0 +1,7 @@
+#!/bin/sh
+# Start the headless app. Without arguments it loads the default fixtures.
+set -e
+cd "$(dirname "$0")"
+swift build -q --package-path Core --product inventory-cli >&2
+[ $# -eq 0 ] && set -- behavior/fixtures/Inventory.default.json
+exec Core/.build/debug/inventory-cli --fixtures "$@"
