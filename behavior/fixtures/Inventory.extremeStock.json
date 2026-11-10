@@ -1,0 +1,14 @@
+{
+  "GET /products?limit=20&select=title,stock": {
+    "status": 200,
+    "body": {
+      "products": [
+        { "id": 1, "title": "Overstocked", "stock": 9223372036854775807 },
+        { "id": 2, "title": "Oversold", "stock": -9223372036854775808 }
+      ],
+      "total": 2,
+      "skip": 0,
+      "limit": 20
+    }
+  }
+}

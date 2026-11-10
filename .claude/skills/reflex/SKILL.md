@@ -71,3 +71,4 @@ await assert.rejects(session.do({ action: 'Fly' }), /unknown action "Fly"/);
 - One journey per fixture set; fold its steps into one test. Separate tests only when the fixtures differ.
 - Expect something the action changes (or provably keeps). An expectation already true before the action proves nothing.
 - `do` polls `ls` for up to 2 s, then fails with the last state it saw. Read that state before touching code.
+- Always close the session (`t.after(() => session.close())`): `close()` asks once more, so a network violation caused by the last step still fails the test.

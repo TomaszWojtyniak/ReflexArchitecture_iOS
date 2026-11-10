@@ -112,6 +112,27 @@ test('a request without a fixture fails the session', async (t) => {
   );
 });
 
+test('stock outside the range from the backend never crashes, and SetQuantity brings it back', async (t) => {
+  const session = createBehaviorSession({ fixtures: [fixture('Inventory.extremeStock')] });
+  t.after(() => session.close());
+  // product 1 arrives with Int.max, product 2 with Int.min
+  for (const [id, edit, afterReset] of [[1, 'Increment', 6], [2, 'Decrement', 4]]) {
+    await openInventoryDetail(session, id);
+    const { state: before } = await session.ls();
+    await session.do({ action: edit, expectation: ({ state }) => assert.equal(state.stockCount, before.stockCount) });
+    await session.do({ action: 'SetQuantity', payload: { quantity: 5 }, expectation: ({ state }) => assert.equal(state.stockCount, 5) });
+    await session.do({ action: edit, expectation: ({ state }) => assert.equal(state.stockCount, afterReset) });
+    await session.do({ action: 'goBack', expectation: ({ name }) => assert.equal(name, 'InventoryList') });
+  }
+});
+
+test('a violation caused by the last step still fails the session', async () => {
+  const session = createBehaviorSession({ fixtures: [fixture('Inventory.stockCount2')] });
+  await openInventoryDetail(session);
+  await session.do({ action: 'Save' }); // no PUT fixture; the request happens after the answer
+  await assert.rejects(session.close(), /network violation: missing fixture: PUT \/products\/1/);
+});
+
 test('edits while a save is in flight change nothing', async (t) => {
   const session = createBehaviorSession({
     fixtures: [fixture('Inventory.stockCount2'), fixture('Inventory.saveSlow')],

@@ -41,8 +41,10 @@ public final class InventoryDetailViewModel: ViewModel {
         case .viewAction(let action):
             guard !state.isSaving else { return }  // nothing changes while a save is in flight
             switch action {
-            case .increment: Self.edit(&state, to: state.stockCount + 1)
-            case .decrement: Self.edit(&state, to: state.stockCount - 1)
+            // Wrapping on purpose: stock from the backend can be Int.max/Int.min; the wrapped
+            // result lands outside stockRange, so edit(_:to:) turns it into a no-op.
+            case .increment: Self.edit(&state, to: state.stockCount &+ 1)
+            case .decrement: Self.edit(&state, to: state.stockCount &- 1)
             case .setQuantity(let quantity): Self.edit(&state, to: quantity)
             case .save:
                 state.isSaving = true

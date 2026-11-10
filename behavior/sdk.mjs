@@ -8,34 +8,49 @@ import { fileURLToPath } from 'node:url';
 const CLI = fileURLToPath(new URL('../Core/.build/debug/inventory-cli', import.meta.url));
 const POLL_MS = 10;
 const TIMEOUT_MS = 2000;
+const ANSWER_MS = 60_000; // generous: macOS may scan a freshly built binary on its first launch
 
 export const fixture = (name) => fileURLToPath(new URL(`./fixtures/${name}.json`, import.meta.url));
 
-export function createBehaviorSession({ fixtures = [] } = {}) {
-  const child = spawn(CLI, ['--fixtures', ...fixtures]);
+export function createBehaviorSession({ fixtures = [], cli = CLI, answerTimeoutMs = ANSWER_MS } = {}) {
+  const child = spawn(cli, ['--fixtures', ...fixtures]);
   const waiting = []; // pending requests, answered by stdout lines in order
   let stderr = '';
-  let exited = null; // the error every call gets once the process is gone
+  let exited = null; // the error every call gets once the session is over
+
+  // Ends the session: pending and later calls reject with the first reason.
+  function fail(error) {
+    exited ??= error;
+    for (const request of waiting.splice(0)) {
+      clearTimeout(request.timer);
+      request.reject(exited);
+    }
+    child.kill();
+  }
 
   child.stderr.on('data', (chunk) => (stderr += chunk));
   child.stdin.on('error', () => {}); // EPIPE after exit; 'close' reports why
   createInterface({ input: child.stdout }).on('line', (line) => {
     const request = waiting.shift();
+    if (!request) return;
+    clearTimeout(request.timer);
     try {
-      request?.resolve(JSON.parse(line));
+      request.resolve(JSON.parse(line));
     } catch {
-      request?.reject(new Error(`inventory-cli answered with non-JSON: ${line}`));
+      request.reject(new Error(`inventory-cli answered with non-JSON: ${line}`));
     }
   });
-  child.on('close', (code) => {
-    exited = new Error(`inventory-cli exited with code ${code}: ${stderr.trim()}`);
-    for (const request of waiting.splice(0)) request.reject(exited);
-  });
+  child.on('close', (code) => fail(new Error(`inventory-cli exited with code ${code}: ${stderr.trim()}`)));
 
   function request(body) {
     if (exited) return Promise.reject(exited);
     return new Promise((resolve, reject) => {
-      waiting.push({ resolve, reject });
+      // A CLI that stops answering fails the session instead of hanging the run.
+      const timer = setTimeout(
+        () => fail(new Error(`inventory-cli did not answer ${JSON.stringify(body)} within ${answerTimeoutMs} ms`)),
+        answerTimeoutMs,
+      );
+      waiting.push({ resolve, reject, timer });
       child.stdin.write(JSON.stringify(body) + '\n');
     });
   }
@@ -73,9 +88,13 @@ export function createBehaviorSession({ fixtures = [] } = {}) {
       if (answer.error) throw new Error(`do ${action} refused: ${answer.error}`);
       if (expectation) await until(expectation);
     },
-    close() {
-      child.stdin.end();
-      child.kill();
+    async close() {
+      try {
+        if (!exited) await ls(); // a violation caused by the last step only shows on the next command
+      } finally {
+        child.stdin.end();
+        child.kill();
+      }
     },
   };
 }
