@@ -13,7 +13,7 @@ struct ReflexArchitectureApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(navigator: app.navigator)
+            RootView(tabs: app.tabs)
             #if DEBUG
                 .task { startServer() }
             #endif
