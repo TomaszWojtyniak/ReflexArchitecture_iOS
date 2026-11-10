@@ -1,105 +1,68 @@
-# ReflexArchitecture od środka
+# Inside ReflexArchitecture
 
-*Prototyp architektury · iOS · Swift 6*
+**English** · [Polski](README.pl.md)
 
-ReflexArchitecture to mała aplikacja iOS zbudowana po to, żeby sprawdzić w praktyce [architekturę Reflex opisaną przez Shopify](https://shopify.engineering/reflex). Logika aplikacji działa bez ekranu, każdy ekran widać z zewnątrz jako stan w JSON z listą akcji, a testy sterują aplikacją z terminala. Poniżej: gdzie co leży, jak działa każda warstwa i co dzieje się w kodzie krok po kroku. Wszystkie fragmenty kodu i wyniki testów pochodzą z repozytorium.
+*An architecture prototype · iOS · Swift 6*
 
-- Stan kodu: `main` @ `dfc6066`
-- Przykład: magazyn z DummyJSON i tab bar z ~/TabBar
-- 8 testów Swift · 14 testów w Node
+ReflexArchitecture is a small iOS app built to try out, in practice, the [Reflex architecture described by Shopify](https://shopify.engineering/reflex). The app's logic runs without a screen, every screen is visible from the outside as JSON state with a list of actions, and tests drive the app from the terminal. Below: where everything lives, how each layer works, and what happens in the code, step by step. All code excerpts and test output come from this repository.
 
-## Cztery filary
+- Code as of: `main` @ `dfc6066`
+- Example: an inventory backed by DummyJSON, plus the tab bar from ~/TabBar
+- 8 Swift tests · 14 Node tests
 
-| Filar | Na czym polega | Gdzie |
+## Four pillars
+
+| Pillar | What it means | Where |
 | --- | --- | --- |
-| **Core bez UI** | Cała logika siedzi w pakiecie Swift, który nie importuje SwiftUI ani UIKit. Buduje się zwykłym `swift build` i działa w procesie w terminalu. | [`Core/Sources/InventoryCore`](Core/Sources/InventoryCore) |
-| **ViewModel jak w Elm** | Ekran to `State`, `Action`, `Message` i jedna funkcja `update`, która jako jedyna zmienia stan. | [`ViewModel.swift`](Core/Sources/InventoryCore/ViewModel.swift) |
-| **Węzły introspekcji** | Każdy ekran widać z zewnątrz jako nazwę, stan w JSON i listę akcji. Kontenery dokładają swoje akcje ekranowi na wierzchu. | [`Core/Sources/IntrospectionKit`](Core/Sources/IntrospectionKit) |
-| **CLI i testy zachowania** | Komendy `ls` i `do` sterują aplikacją bez ekranu w testach, a przez port 7777 także działającą aplikacją w symulatorze. | [`behavior/`](behavior) · [`Core/Sources/InventoryCLI`](Core/Sources/InventoryCLI) |
+| **A headless Core** | All logic lives in a Swift package that imports neither SwiftUI nor UIKit. It builds with a plain `swift build` and runs in a terminal process. | [`Core/Sources/InventoryCore`](Core/Sources/InventoryCore) |
+| **An Elm-style ViewModel** | A screen is `State`, `Action`, `Message`, and a single `update` function, which is the only thing that changes state. | [`ViewModel.swift`](Core/Sources/InventoryCore/ViewModel.swift) |
+| **Introspection nodes** | Every screen is visible from the outside as a name, JSON state, and a list of actions. Containers add their own actions to the screen on top. | [`Core/Sources/IntrospectionKit`](Core/Sources/IntrospectionKit) |
+| **CLI and behavior tests** | The `ls` and `do` commands drive the headless app in tests and, over port 7777, the running app in the simulator too. | [`behavior/`](behavior) · [`Core/Sources/InventoryCLI`](Core/Sources/InventoryCLI) |
 
-## Spis treści
+## Contents
 
-1. [Co gdzie leży](#1-co-gdzie-leży)
-2. [Core bez UI](#2-core-bez-ui)
-3. [ViewModel: jedno wejście, jeden zapis](#3-viewmodel-jedno-wejście-jeden-zapis)
-4. [Węzły introspekcji](#4-węzły-introspekcji)
-5. [CLI i testy zachowania](#5-cli-i-testy-zachowania)
-6. [Ta sama aplikacja na żywo](#6-ta-sama-aplikacja-na-żywo)
-7. [Proces krok po kroku: tab bar](#7-proces-krok-po-kroku-tab-bar)
-8. [Liczby](#8-liczby)
-9. [Granice prototypu](#9-granice-prototypu)
-10. [Ściągawka](#10-ściągawka)
+1. [Where things live](#1-where-things-live)
+2. [A headless Core](#2-a-headless-core)
+3. [ViewModel: one way in, one writer](#3-viewmodel-one-way-in-one-writer)
+4. [Introspection nodes](#4-introspection-nodes)
+5. [CLI and behavior tests](#5-cli-and-behavior-tests)
+6. [The same app, live](#6-the-same-app-live)
+7. [Step by step: the tab bar](#7-step-by-step-the-tab-bar)
+8. [Numbers](#8-numbers)
+9. [Limits of the prototype](#9-limits-of-the-prototype)
+10. [Cheat sheet](#10-cheat-sheet)
 
-## 1. Co gdzie leży
+## 1. Where things live
 
-Repozytorium ma trzy części. Zależności idą w jedną stronę: aplikacja iOS i CLI zależą od Core, a Core nie zależy od niczego, co rysuje ekran.
+The repository has three parts. Dependencies point one way: the iOS app and the CLI depend on Core, and Core depends on nothing that draws a screen.
 
 ```text
 ReflexArchitecture/
-├── Core/                              pakiet SwiftPM, zero UI
-│   ├── Sources/IntrospectionKit/      kontrakt: węzeł, akcja, sesja ls/do, serwer :7777
-│   ├── Sources/InventoryCore/         logika: ViewModele, nawigatory, API, korzeń aplikacji
-│   ├── Sources/InventoryCLI/          host bez UI: stdin/stdout, fixtury, strażnik sieci
-│   └── Tests/                         8 testów Swift samego kontraktu
-├── Mobile/                            aplikacja iOS: widoki SwiftUI i start serwera
-├── behavior/                          testy w Node, bez żadnych zależności
-│   ├── sdk.mjs                        sesja testowa: precondition, do, close
-│   ├── inventory.test.mjs             8 podróży po magazynie
-│   ├── tabs.test.mjs                  5 podróży po tab barze
-│   ├── sdk.test.mjs                   1 test samego SDK
-│   ├── fixtures/*.json                odpowiedzi „sieci” dla CLI
-│   └── live/navigation-race.mjs       ręczny test żywej aplikacji
-├── cli                                uruchamia aplikację bez UI
-├── test                               uruchamia wszystkie testy
-└── .claude/skills/reflex/SKILL.md     instrukcja dla agentów
+├── Core/                              SwiftPM package, zero UI
+│   ├── Sources/IntrospectionKit/      the contract: node, action, ls/do session, :7777 server
+│   ├── Sources/InventoryCore/         the logic: ViewModels, navigators, API, app root
+│   ├── Sources/InventoryCLI/          headless host: stdin/stdout, fixtures, network guard
+│   └── Tests/                         8 Swift tests of the contract itself
+├── Mobile/                            the iOS app: SwiftUI views and server startup
+├── behavior/                          Node tests, no dependencies at all
+│   ├── sdk.mjs                        test session: precondition, do, close
+│   ├── inventory.test.mjs             8 inventory journeys
+│   ├── tabs.test.mjs                  5 tab bar journeys
+│   ├── sdk.test.mjs                   1 test of the SDK itself
+│   ├── fixtures/*.json                "network" responses for the CLI
+│   └── live/navigation-race.mjs       manual test of the live app
+├── cli                                runs the headless app
+├── test                               runs all the tests
+└── .claude/skills/reflex/SKILL.md     instructions for agents
 ```
 
-```mermaid
-flowchart TB
-    tests["Testy zachowania<br/>behavior/*.test.mjs → sdk.mjs"]
-    agent["Ty albo agent<br/>nc, live/navigation-race.mjs"]
+![Fig. 1: two hosts, one Core](docs/diagrams/hosts.en.svg)
 
-    subgraph cli["inventory-cli, bez UI"]
-        cliLoop["stdin → handle → stdout"]
-        fixtureClient["FixtureHTTPClient<br/>NetworkGuard: prawdziwe żądanie = błąd, kod wyjścia 3"]
-    end
+**Fig. 1.** Two hosts build the same Core. The CLI feeds it responses from files and talks over stdin/stdout. The app gives it the real network and listens on port 7777. The way into Core is the same in both cases: `IntrospectionSession.handle(line)`.
 
-    subgraph core["Core, bez SwiftUI"]
-        session["IntrospectionSession"]
-        inventoryApp["InventoryApp<br/>TabNavigator, StackNavigator, ViewModele ekranów"]
-        inventoryAPI["InventoryAPI → HTTPClient"]
-    end
+The compiler guards the boundaries. `Core/Package.swift` exposes three products. The iOS app links only the two libraries, and the CLI is a separate executable:
 
-    subgraph ios["Aplikacja iOS, Debug"]
-        server["IntrospectionServer :7777"]
-        swiftUI["SwiftUI<br/>RootView (TabView), StackView, ekrany"]
-        urlClient["URLSessionHTTPClient"]
-    end
-
-    fixtures[("behavior/fixtures/*.json")]
-    dummyJSON[("dummyjson.com")]
-
-    tests <-->|"stdin/stdout, JSON"| cliLoop
-    agent <-->|"TCP 127.0.0.1:7777"| server
-    cliLoop -->|"handle(line)"| session
-    server -->|"handle(line)"| session
-    session -->|"węzły → send(action:)"| inventoryApp
-    swiftUI -->|"send(action:)"| inventoryApp
-    inventoryApp -->|"stan, @Observable"| swiftUI
-    inventoryApp --> inventoryAPI
-    inventoryAPI -->|"send(request)"| fixtureClient
-    inventoryAPI -->|"send(request)"| urlClient
-    fixtureClient ---|"wczytane na starcie"| fixtures
-    urlClient <-->|"HTTPS GET, PUT"| dummyJSON
-
-    style session stroke:#e5484d,stroke-width:3px
-```
-
-**Rys. 1.** Ten sam Core budują dwa hosty. CLI podaje mu odpowiedzi z plików i rozmawia przez stdin/stdout. Aplikacja podaje mu prawdziwą sieć i słucha na porcie 7777. Wejście do Core jest w obu przypadkach to samo: `IntrospectionSession.handle(line)`.
-
-Granic pilnuje kompilator. `Core/Package.swift` wystawia trzy produkty. Aplikacja iOS dołącza tylko dwie biblioteki, a CLI jest osobnym programem:
-
-[`Core/Package.swift`](Core/Package.swift) (fragment)
+[`Core/Package.swift`](Core/Package.swift) (excerpt)
 
 ```swift
 let settings: [SwiftSetting] = [
@@ -115,11 +78,11 @@ let settings: [SwiftSetting] = [
     ],
 ```
 
-Cały pakiet domyślnie działa na głównym aktorze (`defaultIsolation(MainActor.self)`). ViewModele i tak żyją na wątku głównym, więc nie trzeba ich oznaczać. Jako `nonisolated` oznaczone są tylko typy wartości, które przechodzą między wątkami, np. `Product` i dane wejściowe akcji.
+The whole package runs on the main actor by default (`defaultIsolation(MainActor.self)`). ViewModels live on the main thread anyway, so they need no annotation. Only value types that cross threads are marked `nonisolated`, such as `Product` and action inputs.
 
-## 2. Core bez UI
+## 2. A headless Core
 
-Korzeniem aplikacji jest `InventoryApp`. Buduje drzewo obiektów i przyjmuje z zewnątrz tylko jedną rzecz: `HTTPClient`, czyli krawędź sieci.
+The app's root is `InventoryApp`. It builds the object tree and takes exactly one thing from outside: an `HTTPClient`, the network edge.
 
 [`Core/Sources/InventoryCore/InventoryApp.swift`](Core/Sources/InventoryCore/InventoryApp.swift)
 
@@ -139,9 +102,9 @@ public final class InventoryApp {
 }
 ```
 
-Oba hosty budują ten sam korzeń. Różnią się klientem HTTP i tym, kto czyta stan: w aplikacji robi to SwiftUI, w CLI sesja tekstowa.
+Both hosts build the same root. They differ in their HTTP client and in who reads the state: SwiftUI in the app, a text session in the CLI.
 
-[`Mobile/ReflexArchitectureApp.swift`](Mobile/ReflexArchitectureApp.swift) (fragment)
+[`Mobile/ReflexArchitectureApp.swift`](Mobile/ReflexArchitectureApp.swift) (excerpt)
 
 ```swift
 @State private var app = InventoryApp(http: URLSessionHTTPClient())
@@ -152,7 +115,7 @@ WindowGroup {
 }
 ```
 
-[`Core/Sources/InventoryCLI/CLI.swift`](Core/Sources/InventoryCLI/CLI.swift) (fragment)
+[`Core/Sources/InventoryCLI/CLI.swift`](Core/Sources/InventoryCLI/CLI.swift) (excerpt)
 
 ```swift
 NetworkGuard.install()
@@ -160,35 +123,16 @@ let session = IntrospectionSession(
     root: InventoryApp(http: FixtureHTTPClient(fixtures: fixtures)))
 ```
 
-```mermaid
-flowchart TB
-    app["InventoryApp<br/>korzeń drzewa"]
-    tabs["TabNavigator<br/>selected: MainTab<br/>isReportPresented: Bool"]
-    stack["StackNavigator<br/>root: Route<br/>path: [Route]"]
-    list["InventoryListViewModel<br/>products, isLoading, error"]
-    detail["InventoryDetailViewModel<br/>stockCount, isSaving, isSaved"]
-    api["InventoryAPI<br/>GET, PUT"]
-    http["HTTPClient (protokół)<br/>app: URLSession · CLI: fixtury"]
+![Fig. 2: the object tree](docs/diagrams/object-tree.en.svg)
 
-    app -->|tabs| tabs
-    tabs -->|home| stack
-    stack -->|root| list
-    stack -->|"path[0]"| detail
-    list -->|api| api
-    detail -->|api| api
-    api -->|http| http
-    list -.->|"push(.detail)"| stack
-    detail -.->|"onSaved(product)"| list
-```
+**Fig. 2.** The object tree after opening a product's details. The list doesn't know the navigator; it only gets a `push` function. The details screen doesn't know the list; it only gets `onSaved`. The tab placeholders and the “Zgłoś” (Report) sheet are not objects: their nodes are derived from `TabNavigator`'s state.
 
-**Rys. 2.** Drzewo obiektów po otwarciu szczegółów produktu. Linia ciągła: obiekt trzyma referencję. Linia przerywana: wywołanie zwrotne (closure). Lista nie zna nawigatora, dostaje tylko funkcję `push`. Ekran szczegółów nie zna listy, dostaje tylko `onSaved`. Zaślepki zakładek i arkusz „Zgłoś” nie są obiektami: ich węzły powstają ze stanu `TabNavigator`.
+Two decisions let the same code run without a screen.
 
-Dwie decyzje sprawiają, że ten sam kod działa bez ekranu.
+- **Navigation is Core state.** `StackNavigator` holds the path of screens, and `TabNavigator` holds the selected tab and whether the report sheet is open. A view never opens anything by itself; it only sends an action.
+- **Nothing waits for a view's lifecycle.** The list starts loading in `init`, not in `onAppear`. A terminal has no `onAppear`, so if loading depended on it, the CLI would never start it.
 
-- **Nawigacja to stan Core.** `StackNavigator` trzyma ścieżkę ekranów, a `TabNavigator` wybraną zakładkę i to, czy arkusz „Zgłoś” jest otwarty. Widok nigdy sam niczego nie otwiera, tylko wysyła akcję.
-- **Nic nie czeka na cykl życia widoku.** Lista zaczyna ładowanie w `init`, a nie w `onAppear`. W terminalu nie ma `onAppear`, więc gdyby ładowanie od niego zależało, CLI nigdy by go nie uruchomiło.
-
-[`Core/Sources/InventoryCore/InventoryListViewModel.swift`](Core/Sources/InventoryCore/InventoryListViewModel.swift) (fragment)
+[`Core/Sources/InventoryCore/InventoryListViewModel.swift`](Core/Sources/InventoryCore/InventoryListViewModel.swift) (excerpt)
 
 ```swift
 /// Starts loading right away: no view lifecycle involved, so headless runs behave the same.
@@ -199,9 +143,9 @@ init(api: InventoryAPI, push: @escaping (Route) -> Void) {
 }
 ```
 
-## 3. ViewModel: jedno wejście, jeden zapis
+## 3. ViewModel: one way in, one writer
 
-Każdy ekran i każdy nawigator ma ten sam kształt. Opisuje go krótki protokół:
+Every screen and every navigator has the same shape, described by a short protocol:
 
 [`Core/Sources/InventoryCore/ViewModel.swift`](Core/Sources/InventoryCore/ViewModel.swift)
 
@@ -227,32 +171,13 @@ extension ViewModel {
 }
 ```
 
-```mermaid
-flowchart TB
-    swiftUIView["Widok SwiftUI<br/>Button { send(…) }"]
-    introNode["Węzeł introspekcji<br/>do Save z CLI lub :7777"]
-    sendAction["send(action:)<br/>.viewAction(action)"]
-    updateFn["update(state:message:)<br/>jedyny zapis stanu"]
-    stateBox["state<br/>@Observable"]
-    effectTask["Task { api.save }<br/>efekt, poza update"]
+![Fig. 3: the ViewModel loop](docs/diagrams/viewmodel-loop.en.svg)
 
-    swiftUIView -->|stuknięcie| sendAction
-    introNode -->|"do Save"| sendAction
-    sendAction -->|Message| updateFn
-    updateFn -->|zapis| stateBox
-    stateBox -->|"body czyta state"| swiftUIView
-    stateBox -->|"ls czyta state"| introNode
-    updateFn -->|start| effectTask
-    effectTask -->|".saved / .saveFailed"| updateFn
+**Fig. 3.** The view and the introspection node come in through the same door: `send(action:)`. Only `update` changes state. An effect, here the save on the server, runs in a `Task` and comes back to `update` as a new message.
 
-    style updateFn stroke:#e5484d,stroke-width:3px
-```
+Here is what that looks like in the product details screen:
 
-**Rys. 3.** Widok i węzeł introspekcji wchodzą tymi samymi drzwiami: `send(action:)`. Stan zmienia tylko `update`. Efekt, czyli zapis na serwerze, działa w `Task` i wraca do `update` jako nowa wiadomość.
-
-Tak wygląda to w ekranie szczegółów produktu:
-
-[`Core/Sources/InventoryCore/InventoryDetailViewModel.swift`](Core/Sources/InventoryCore/InventoryDetailViewModel.swift) (fragment)
+[`Core/Sources/InventoryCore/InventoryDetailViewModel.swift`](Core/Sources/InventoryCore/InventoryDetailViewModel.swift) (excerpt)
 
 ```swift
 public struct State: Encodable {
@@ -309,19 +234,19 @@ func update(state: inout State, message: Message) {
 }
 ```
 
-### Co się dzieje po naciśnięciu Save
+### What happens when you tap Save
 
-1. Przycisk w widoku woła `viewModel.send(action: .save)`. Test robi dokładnie to samo przez akcję `Save` węzła.
-2. `send(action:)` opakowuje akcję w `Message.viewAction(.save)` i woła `update`.
-3. `update` ustawia `isSaving = true`, czyści błąd i uruchamia `Task`, który wywołuje `api.save(id:stock:)`.
-4. Odpowiedź serwera wraca jako nowa wiadomość, `.saved` albo `.saveFailed`, i znowu przechodzi przez `update`.
-5. Przy `.saved` stan dostaje `isSaved = true`, a `onSaved` przekazuje nową liczbę liście. Po powrocie lista pokazuje już zapisaną wartość.
+1. The button in the view calls `viewModel.send(action: .save)`. A test does exactly the same through the node's `Save` action.
+2. `send(action:)` wraps the action in `Message.viewAction(.save)` and calls `update`.
+3. `update` sets `isSaving = true`, clears the error, and starts a `Task` that calls `api.save(id:stock:)`.
+4. The server's answer comes back as a new message, `.saved` or `.saveFailed`, and goes through `update` again.
+5. On `.saved`, the state gets `isSaved = true`, and `onSaved` hands the new count to the list. Back on the list, it already shows the saved value.
 
-Przypadki brzegowe rozstrzyga `update`, nigdy widok ani węzeł. W trakcie zapisu edycje nic nie robią (`guard !state.isSaving`). Liczba spoza zakresu 0–999&nbsp;999 jest ignorowana, a `&+` i `&-` chronią przed przepełnieniem, gdy backend zwróci `Int.max`. Każdą z tych reguł sprawdza osobna podróż w [`behavior/inventory.test.mjs`](behavior/inventory.test.mjs).
+Edge cases are decided by `update`, never by the view or the node. While a save is in flight, edits do nothing (`guard !state.isSaving`). A count outside 0–999,999 is ignored, and `&+` and `&-` protect against overflow when the backend returns `Int.max`. Each of these rules has its own journey in [`behavior/inventory.test.mjs`](behavior/inventory.test.mjs).
 
-Widok tylko czyta stan i wysyła akcje. Jedyny lokalny stan widoku to bufor wpisywanej liczby:
+The view only reads state and sends actions. Its only local state is the buffer for the number being typed:
 
-[`Mobile/InventoryDetailView.swift`](Mobile/InventoryDetailView.swift) (fragment)
+[`Mobile/InventoryDetailView.swift`](Mobile/InventoryDetailView.swift) (excerpt)
 
 ```swift
 struct InventoryDetailView: View {
@@ -347,11 +272,11 @@ struct InventoryDetailView: View {
                 …
 ```
 
-## 4. Węzły introspekcji
+## 4. Introspection nodes
 
-Węzeł to ekran widziany z zewnątrz: nazwa, stan, który da się zakodować jako JSON, lista akcji i opcjonalnie węzeł pod spodem.
+A node is a screen seen from the outside: a name, state that can be encoded as JSON, a list of actions, and optionally the node below it.
 
-[`Core/Sources/IntrospectionKit/IntrospectionNode.swift`](Core/Sources/IntrospectionKit/IntrospectionNode.swift) (fragment)
+[`Core/Sources/IntrospectionKit/IntrospectionNode.swift`](Core/Sources/IntrospectionKit/IntrospectionNode.swift) (excerpt)
 
 ```swift
 /// A screen (or a container of screens) seen from outside the app:
@@ -364,7 +289,7 @@ Węzeł to ekran widziany z zewnątrz: nazwa, stan, który da się zakodować ja
 }
 ```
 
-Ekran szczegółów wystawia swój stan bez zmian i po jednej akcji na każdy przypadek `Action`:
+The details screen exposes its state as is, plus one action per `Action` case:
 
 [`Core/Sources/InventoryCore/InventoryDetailViewModel+Introspection.swift`](Core/Sources/InventoryCore/InventoryDetailViewModel+Introspection.swift)
 
@@ -395,13 +320,13 @@ nonisolated struct SetQuantityInput: IntrospectionInput {
 }
 ```
 
-> **Reguły węzła.** Jeśli użytkownik coś widzi, jest to w stanie. Jeśli może coś zrobić, jest to akcja. Każda akcja jest na liście zawsze, bez `if`, i tylko woła `send(action:)`. Czy akcja coś zmieni, rozstrzyga `update`.
+> **Node rules.** If the user can see it, it's in the state. If the user can do it, it's an action. Every action is always listed, with no `if`, and only calls `send(action:)`. Whether an action changes anything is up to `update`.
 
-### Kontenery pożyczają akcje
+### Containers lend actions
 
-Nawigatory też są węzłami, ale nie mają własnego ekranu. Ich akcje są pisane małą literą (`goBack`, `selectTab`, `dismiss`), bo trafiają do ekranu na wierzchu jako pożyczone. Pole `child` mówi, co jest pod spodem. W tab barze zależy to od stanu:
+Navigators are nodes too, but they have no screen of their own. Their actions are lowercase (`goBack`, `selectTab`, `dismiss`) because they reach the screen on top as borrowed actions. The `child` property says what is underneath. In the tab bar, that depends on the state:
 
-[`Core/Sources/InventoryCore/TabNavigator+Introspection.swift`](Core/Sources/InventoryCore/TabNavigator+Introspection.swift) (fragment)
+[`Core/Sources/InventoryCore/TabNavigator+Introspection.swift`](Core/Sources/InventoryCore/TabNavigator+Introspection.swift) (excerpt)
 
 ```swift
 private struct Node: IntrospectionNode {
@@ -434,9 +359,9 @@ private struct Sheet: IntrospectionNode {
 }
 ```
 
-Sesja schodzi po `child` aż do najgłębszego węzła. Ten węzeł ma fokus: jego nazwę i stan pokazuje `ls`. Akcje są zbierane z całej ścieżki, najpierw własne, potem rodziców od najbliższego:
+The session follows `child` down to the deepest node. That node has the focus: `ls` shows its name and state. Actions are collected along the whole path: its own first, then the ancestors', nearest first:
 
-[`Core/Sources/IntrospectionKit/IntrospectionSession.swift`](Core/Sources/IntrospectionKit/IntrospectionSession.swift) (fragment)
+[`Core/Sources/IntrospectionKit/IntrospectionSession.swift`](Core/Sources/IntrospectionKit/IntrospectionSession.swift) (excerpt)
 
 ```swift
 /// The deepest node, and every action available there: its own first,
@@ -450,37 +375,15 @@ private func focus() -> (node: any IntrospectionNode, actions: [IntrospectionAct
 }
 ```
 
-```mermaid
-flowchart LR
-    subgraph before["Arkusz zamknięty"]
-        direction TB
-        tabBar1["TabBar<br/>pożycza: selectTab {tab}"]
-        stack1["Stack<br/>pożycza: goBack"]
-        detail1["InventoryDetail · fokus<br/>własne: Increment, Decrement, Save, SetQuantity {quantity}"]
-        ls1["ls → InventoryDetail<br/>actions: Increment, Decrement, Save,<br/>SetQuantity {quantity}, goBack, selectTab {tab}"]
-        tabBar1 -->|child| stack1 -->|child| detail1 -.->|ls| ls1
-    end
+![Fig. 4: the focus before and after opening the report sheet](docs/diagrams/focus.en.svg)
 
-    subgraph after["Arkusz „Zgłoś” otwarty"]
-        direction TB
-        tabBar2["TabBar<br/>pożycza: selectTab {tab}"]
-        sheet2["Sheet<br/>pożycza: dismiss"]
-        report2["Report · fokus<br/>własne: brak · state {#quot;title#quot;:#quot;Zgłoś#quot;}"]
-        ls2["ls → Report<br/>actions: dismiss, selectTab {tab}<br/>goBack zniknął: Stack nie jest na ścieżce"]
-        tabBar2 -->|"child, bo isReportPresented"| sheet2 -->|child| report2 -.->|ls| ls2
-    end
+**Fig. 4.** The same app before and after opening the report sheet. Exactly one thing changes: the tab bar's `child`. With it, `goBack` disappears and `dismiss` appears, even though no action list contains an `if`. In the `ls` results, borrowed actions take the color of the container that lends them.
 
-    before ~~~ after
-    style sheet2 stroke:#e5484d,stroke-width:3px
-```
+### Action input
 
-**Rys. 4.** Ta sama aplikacja przed otwarciem arkusza „Zgłoś” (po `do SelectProduct {"id":1}`) i po nim (po `do selectTab {"tab":"report"}`). Zmienia się jedna rzecz: `child` tab bara. Razem z nią znika `goBack`, a pojawia się `dismiss`, choć na żadnej liście akcji nie ma `if`.
+An action with data receives a JSON object and decodes it into an `IntrospectionInput` type. Bad data fails before it ever reaches the ViewModel. For tabs, the error lists the valid values right away:
 
-### Dane wejściowe akcji
-
-Akcja z danymi dostaje obiekt JSON i dekoduje go do typu `IntrospectionInput`. Złe dane kończą się błędem, zanim dotrą do ViewModelu. Dla zakładek błąd od razu podaje poprawne wartości:
-
-[`Core/Sources/InventoryCore/TabNavigator+Introspection.swift`](Core/Sources/InventoryCore/TabNavigator+Introspection.swift) (fragment)
+[`Core/Sources/InventoryCore/TabNavigator+Introspection.swift`](Core/Sources/InventoryCore/TabNavigator+Introspection.swift) (excerpt)
 
 ```swift
 nonisolated struct SelectTabInput: IntrospectionInput {
@@ -508,11 +411,11 @@ do selectTab {"tab":"settings"}
 error: selectTab expects {tab}: unknown tab "settings"; tabs: home, search, favorites, profile, report
 ```
 
-## 5. CLI i testy zachowania
+## 5. CLI and behavior tests
 
-### Protokół: dwie komendy
+### The protocol: two commands
 
-`ls` pokazuje ekran z fokusem. `do <Akcja> [json]` wykonuje jedną z akcji, które `ls` właśnie pokazał. Linia tekstu dostaje odpowiedź do czytania:
+`ls` shows the focused screen. `do <Action> [json]` runs one of the actions that `ls` just listed. A plain text line gets an answer meant for reading:
 
 ```console
 $ printf 'ls\ndo SelectProduct {"id":1}\ndo selectTab {"tab":"report"}\nls\ndo dismiss\nls\n' | ./cli
@@ -530,7 +433,7 @@ InventoryDetail
   actions Increment, Decrement, Save, SetQuantity {quantity}, goBack, selectTab {tab}
 ```
 
-Linia zaczynająca się od `{` to zapytanie JSON. Dostaje odpowiedź w jednej linii JSON i tego trybu używają testy:
+A line that starts with `{` is a JSON request. It gets a one-line JSON answer, and that is the mode the tests use:
 
 ```text
 {"cmd":"ls"}
@@ -539,11 +442,11 @@ Linia zaczynająca się od `{` to zapytanie JSON. Dostaje odpowiedź w jednej li
 {"ok":true}
 ```
 
-### Host bez UI
+### The headless host
 
-`inventory-cli` czyta komendy ze stdin i każdą odpowiedź od razu wypisuje na stdout. Czytanie jest asynchroniczne, więc między komendami mogą działać efekty, np. zapis na serwerze:
+`inventory-cli` reads commands from stdin and writes each answer to stdout right away. Reading is asynchronous, so effects such as a save on the server can run between commands:
 
-[`Core/Sources/InventoryCLI/CLI.swift`](Core/Sources/InventoryCLI/CLI.swift) (fragment)
+[`Core/Sources/InventoryCLI/CLI.swift`](Core/Sources/InventoryCLI/CLI.swift) (excerpt)
 
 ```swift
 NetworkGuard.install()
@@ -561,7 +464,7 @@ where !line.trimmingCharacters(in: .whitespaces).isEmpty {
 }
 ```
 
-Sieć zastępują fixtury. Kluczem jest metoda i ścieżka z zapytaniem, wartością status, opcjonalnie treść i opóźnienie. Test ładuje kilka małych plików naraz, a przy tym samym kluczu wygrywa późniejszy:
+Fixtures replace the network. The key is the method plus the path with its query; the value is a status, optionally with a body and a delay. A test loads several small files at once, and for the same key the later one wins:
 
 [`behavior/fixtures/Inventory.stockCount2.json`](behavior/fixtures/Inventory.stockCount2.json)
 
@@ -580,7 +483,7 @@ Sieć zastępują fixtury. Kluczem jest metoda i ścieżka z zapytaniem, wartoś
 { "PUT /products/1": { "status": 200, "delayMs": 500 } }
 ```
 
-Zero sieci jest wymuszone. `NetworkGuard` przechwytuje każde prawdziwe żądanie, a `FixtureHTTPClient` zapisuje każde żądanie, dla którego nie ma fixtury. CLI kończy wtedy pracę z kodem 3, nawet jeśli aplikacja obsłużyła błąd:
+Zero network is enforced. `NetworkGuard` intercepts every real request, and `FixtureHTTPClient` records every request that has no fixture. The CLI then exits with code 3, even if the app handled the error:
 
 ```console
 $ printf 'do SelectProduct {"id":1}\ndo Save\nls\n' | ./cli behavior/fixtures/Inventory.stockCount2.json
@@ -591,15 +494,15 @@ $ echo $?
 3
 ```
 
-### SDK testów
+### The test SDK
 
-[`behavior/sdk.mjs`](behavior/sdk.mjs) uruchamia CLI jako proces potomny i rozmawia z nim w JSON. Nie ma żadnych zależności poza Node. Testy używają trzech metod:
+[`behavior/sdk.mjs`](behavior/sdk.mjs) starts the CLI as a child process and talks to it in JSON. It has no dependencies beyond Node. Tests use three methods:
 
-- `precondition(name, check)` czeka, aż ekran z fokusem będzie miał tę nazwę i spełni warunek.
-- `do({ action, payload, expectation })` wykonuje akcję, a potem co 10 ms pyta `ls`, aż oczekiwanie przestanie rzucać błąd. Po 2 s test pada i pokazuje ostatni widziany stan.
-- `close()` pyta CLI jeszcze raz, żeby naruszenie sieci spowodowane ostatnim krokiem też oblało test.
+- `precondition(name, check)` waits until the focused screen has that name and passes the check.
+- `do({ action, payload, expectation })` runs the action, then asks `ls` every 10 ms until the expectation stops throwing. After 2 s the test fails and shows the last state it saw.
+- `close()` asks the CLI one more time, so that a network violation caused by the last step fails the test too.
 
-[`behavior/sdk.mjs`](behavior/sdk.mjs) (fragment)
+[`behavior/sdk.mjs`](behavior/sdk.mjs) (excerpt)
 
 ```javascript
 // Polls ls until check(node) stops throwing. A dead process fails at once (ls rejects);
@@ -628,11 +531,11 @@ async function until(check) {
   },
 ```
 
-### Test od środka
+### A test, from the inside
 
-Pierwsza podróż w [`behavior/inventory.test.mjs`](behavior/inventory.test.mjs) przechodzi całą ścieżkę zapisu. Fixtury `stockCount2` i `saveSucceeds` dają jeden produkt ze stanem 2 i udany `PUT`:
+The first journey in [`behavior/inventory.test.mjs`](behavior/inventory.test.mjs) walks the whole save path. The `stockCount2` and `saveSucceeds` fixtures provide one product with a stock of 2 and a successful `PUT`:
 
-[`behavior/inventory.test.mjs`](behavior/inventory.test.mjs) (fragment)
+[`behavior/inventory.test.mjs`](behavior/inventory.test.mjs) (excerpt)
 
 ```javascript
 // Every journey starts on the loaded list and opens one product.
@@ -685,43 +588,17 @@ test('given save succeeds, the user can adjust the quantity and save it', async 
 });
 ```
 
-Krok `Save` z tej podróży wygląda w środku tak:
+Here is the `Save` step of that journey, from the inside:
 
-```mermaid
-sequenceDiagram
-    participant T as test + sdk.mjs
-    participant C as inventory-cli
-    participant S as IntrospectionSession
-    participant V as ViewModel szczegółów
-    participant F as FixtureHTTPClient
+![Fig. 5: the Save step as a sequence](docs/diagrams/save-step.en.svg)
 
-    T->>C: {"cmd":"do","action":"Save"}
-    C->>S: handle(line)
-    S->>V: send(action: .save)
-    Note over V: isSaving = true<br/>Task { api.save }
-    S-->>C: {"ok":true}
-    Note over C: NetworkGuard: czysto
-    C-->>T: {"ok":true}
-    T->>C: {"cmd":"ls"}
-    C->>S: handle(line)
-    S-->>C: węzeł z fokusem jako JSON
-    C-->>T: "isSaving": true
-    Note over T: oczekiwanie niespełnione:<br/>za 10 ms znowu ls
-    V->>F: PUT /products/1
-    F-->>V: 200 z fixtury
-    Note over V: .saved → update<br/>isSaved = true
-    T->>C: {"cmd":"ls"}
-    Note over C,S: przez sesję, jak wyżej
-    C-->>T: "isSaved": true → spełnione
-```
+**Fig. 5.** One step: `session.do({ action: 'Save', … })`. The test sends each command as a single JSON line, such as `{"cmd":"do","action":"Save"}`, and `inventory-cli` passes it to `IntrospectionSession`. An `ok` answer only means the action was accepted. The result is decided by the expectation, which the SDK checks by repeating `ls`. The order can vary: without a delay in the fixture, the save usually finishes before the first `ls`. The test assumes neither; it simply keeps asking.
 
-**Rys. 5.** Jeden krok `session.do({ action: 'Save', … })`. Odpowiedź `ok` znaczy tylko, że akcję przyjęto. O wyniku decyduje oczekiwanie, które SDK sprawdza, ponawiając `ls`. Kolejność bywa różna: bez opóźnienia w fixturze zapis zwykle kończy się jeszcze przed pierwszym `ls`. Test tego nie zakłada, po prostu pyta do skutku.
+## 6. The same app, live
 
-## 6. Ta sama aplikacja na żywo
+In a Debug build the app starts an `IntrospectionServer`. Underneath is the same `IntrospectionSession` as in the CLI; only the commands arrive over TCP. They reach the running app's ViewModels, so the screen shows their effect immediately.
 
-W buildzie Debug aplikacja uruchamia `IntrospectionServer`. Pod spodem jest ten sam `IntrospectionSession` co w CLI, tylko komendy przychodzą po TCP. Trafiają do ViewModeli działającej aplikacji, więc ekran od razu pokazuje ich skutek.
-
-[`Core/Sources/IntrospectionKit/IntrospectionServer.swift`](Core/Sources/IntrospectionKit/IntrospectionServer.swift) (fragment)
+[`Core/Sources/IntrospectionKit/IntrospectionServer.swift`](Core/Sources/IntrospectionKit/IntrospectionServer.swift) (excerpt)
 
 ```swift
 public init(port: UInt16, session: IntrospectionSession) throws {
@@ -735,7 +612,7 @@ public init(port: UInt16, session: IntrospectionSession) throws {
 }
 ```
 
-[`Mobile/ReflexArchitectureApp.swift`](Mobile/ReflexArchitectureApp.swift) (fragment)
+[`Mobile/ReflexArchitectureApp.swift`](Mobile/ReflexArchitectureApp.swift) (excerpt)
 
 ```swift
 #if DEBUG
@@ -761,34 +638,15 @@ Report
   actions dismiss, selectTab {tab}
 ```
 
-W symulatorze otwierają się wtedy szczegóły drugiego produktu, a na nich arkusz „Zgłoś”, dokładnie jak po stuknięciach palcem.
+The simulator then opens the second product's details with the report sheet on top, exactly as if you had tapped your way there.
 
-```mermaid
-flowchart TB
-    user["Użytkownik<br/>stuknięcia, gesty"]
-    agent["Terminal albo agent<br/>nc 127.0.0.1 7777"]
-    swiftUI["SwiftUI<br/>TabView(selection:)<br/>NavigationStack(path:)<br/>.sheet(isPresented:)<br/>RootView, StackView"]
-    server["IntrospectionServer<br/>127.0.0.1:7777, build Debug<br/>IntrospectionSession → węzły → send(action:)"]
-    stackGuard["Strażnik w StackView<br/>zdjęcie ekranu młodszego niż 0,5 s<br/>jest ignorowane"]
-    coreState["Core: stan<br/>TabNavigator.state<br/>StackNavigator.state.path<br/>ViewModel.state"]
+![Fig. 6: the live app and its single source of truth](docs/diagrams/live-app.en.svg)
 
-    user -->|gest| swiftUI
-    agent -->|"ls / do"| server
-    swiftUI -->|"Binding.set → send(action:)"| coreState
-    coreState -->|Binding.get| swiftUI
-    server -->|"send(action:)"| coreState
-    coreState -->|"stan → JSON"| server
-    swiftUI -.->|"zapis stosu po animacji"| stackGuard
-    stackGuard -->|"popTo(depth:) tylko po 0,5 s"| coreState
+**Fig. 6.** State lives in Core. SwiftUI reads it through `Binding.get` and reports gestures through `Binding.set`, which sends an action. The terminal comes in through the same door, over port 7777. The only filter sits on the path of the screen stack.
 
-    style stackGuard stroke:#e5484d,stroke-width:3px
-```
+SwiftUI gets state through plain `Binding`s: `get` reads Core, and `set` turns a gesture into an action. Core decides what that action does:
 
-**Rys. 6.** Stan żyje w Core. SwiftUI czyta go przez `Binding.get` i zgłasza gesty przez `Binding.set`, które wysyła akcję. Terminal wchodzi tymi samymi drzwiami przez port 7777. Jedyny filtr stoi na ścieżce stosu ekranów.
-
-SwiftUI dostaje stan przez zwykłe `Binding`. `get` czyta Core, a `set` zamienia gest w akcję. Decyzję, co ta akcja zrobi, podejmuje Core:
-
-[`Mobile/RootView.swift`](Mobile/RootView.swift) (fragment)
+[`Mobile/RootView.swift`](Mobile/RootView.swift) (excerpt)
 
 ```swift
 TabView(selection: Binding(get: { tabs.state.selected }, set: { tabs.send(action: .selectTab($0)) })) {
@@ -806,11 +664,11 @@ TabView(selection: Binding(get: { tabs.state.selected }, set: { tabs.send(action
 }
 ```
 
-### Nieaktualne zapisy z SwiftUI
+### Stale writes from SwiftUI
 
-Po zakończeniu animacji SwiftUI zapisuje z powrotem stos ekranów, który pokazuje. Gdy agent wysyła akcje szybciej, niż trwają animacje, ten zapis bywa nieaktualny i zdjąłby świeżo otwarty ekran. Ręczny test [`behavior/live/navigation-race.mjs`](behavior/live/navigation-race.mjs) pokazał 2 zgubione ekrany na 30 szybkich podróży. Dlatego `StackView` ignoruje zdjęcie ekranu, który SwiftUI zna krócej niż 0,5 s:
+When an animation ends, SwiftUI writes back the stack of screens it is showing. When an agent sends actions faster than the animations run, that write can be stale and would pop a screen that was just opened. The manual test [`behavior/live/navigation-race.mjs`](behavior/live/navigation-race.mjs) lost 2 screens in 30 fast journeys. So `StackView` ignores a pop of any screen that SwiftUI has known for less than 0.5 s:
 
-[`Mobile/StackView.swift`](Mobile/StackView.swift) (fragment)
+[`Mobile/StackView.swift`](Mobile/StackView.swift) (excerpt)
 
 ```swift
 set: { newPath in
@@ -827,21 +685,21 @@ set: { newPath in
 }
 ```
 
-Po tej zmianie test daje 0 zgubionych ekranów na 120 podróży, także wewnątrz tab bara. Zakładki i arkusz nie potrzebowały osobnej ochrony: 60 szybkich przełączeń zakładek i 60 otwarć arkusza przez port 7777 nie dało żadnej rozbieżności między Core a ekranem.
+After that change the test loses 0 screens in 120 journeys, inside the tab bar as well. Tabs and the sheet needed no protection of their own: 60 fast tab switches and 60 sheet openings over port 7777 produced no mismatch between Core and the screen.
 
-## 7. Proces krok po kroku: tab bar
+## 7. Step by step: the tab bar
 
-Architekturę najlepiej widać przy dodawaniu funkcji. Tab bar powstał w poniższej kolejności. Kroki od 2 do 5 nie wymagają symulatora i każdy przebieg testów trwa poniżej sekundy.
+The architecture shows best when you add a feature. The tab bar was built in the order below. Steps 2 to 5 need no simulator, and each test run takes under a second.
 
-### Krok 1. Opis zachowania
+### Step 1. Describe the behavior
 
-Najpierw w rozmowie: pięć zakładek jak w ~/TabBar, Home z magazynem, „Zgłoś” otwiera arkusz zamiast przełączać zakładkę, a wybraną zakładkę trzyma Core. Do tego pięć ścieżek, które mają działać.
+First, in conversation: five tabs as in ~/TabBar, Home with the inventory, “Zgłoś” (Report) opens a sheet instead of switching tabs, and Core holds the selected tab. Plus five journeys that must work.
 
-### Krok 2. Testy przed kodem
+### Step 2. Tests before code
 
-Plik [`behavior/tabs.test.mjs`](behavior/tabs.test.mjs) opisuje te ścieżki w języku akcji. Funkcje pomocnicze i jedna z podróży:
+[`behavior/tabs.test.mjs`](behavior/tabs.test.mjs) describes those journeys in the language of actions. The helpers and one of the journeys:
 
-[`behavior/tabs.test.mjs`](behavior/tabs.test.mjs) (fragment)
+[`behavior/tabs.test.mjs`](behavior/tabs.test.mjs) (excerpt)
 
 ```javascript
 function startOnHome(t) {
@@ -873,9 +731,9 @@ test('Zgłoś opens the report over the current tab, and closing it returns ther
 });
 ```
 
-### Krok 3. Czerwono
+### Step 3. Red
 
-Testy uruchomione przed napisaniem kodu padają z właściwego powodu: akcji `selectTab` jeszcze nie ma.
+Run before any code is written, the tests fail for the right reason: there is no `selectTab` action yet.
 
 ```console
 $ node --test behavior/tabs.test.mjs
@@ -888,11 +746,11 @@ not ok 2 - switching tabs keeps Home where the user left it
 # fail 5
 ```
 
-### Krok 4. Logika w Core
+### Step 4. Logic in Core
 
-`TabNavigator` dostaje stan, akcje i `update`, a reguły z opisu trafiają do `update`. Węzeł tab bara pokazany był wyżej, w części o węzłach.
+`TabNavigator` gets its state, actions, and `update`, and the rules from the description go into `update`. The tab bar's node was shown earlier, in the section on nodes.
 
-[`Core/Sources/InventoryCore/TabNavigator.swift`](Core/Sources/InventoryCore/TabNavigator.swift) (fragment)
+[`Core/Sources/InventoryCore/TabNavigator.swift`](Core/Sources/InventoryCore/TabNavigator.swift) (excerpt)
 
 ```swift
 func update(state: inout State, message: Message) {
@@ -912,7 +770,7 @@ func update(state: inout State, message: Message) {
 }
 ```
 
-### Krok 5. Zielono
+### Step 5. Green
 
 ```console
 $ node --test behavior/tabs.test.mjs
@@ -925,53 +783,53 @@ ok 5 - tab actions that make no sense change nothing
 # fail 0
 ```
 
-Potem cały `./test`: 8 testów Swift i 14 w Node, wszystkie przechodzą.
+Then the full `./test`: 8 Swift tests and 14 Node tests, all passing.
 
-### Krok 6. Widok
+### Step 6. The view
 
-Dopiero teraz `RootView` dostaje `TabView`, a dotychczasowy stos z ochroną przed wyścigiem przechodzi bez zmian do `StackView`. Widok nie ma logiki: stuknięcie to `selectTab`, reszta to odczyt stanu.
+Only now does `RootView` get a `TabView`, and the existing stack, with its race protection, moves unchanged into `StackView`. The view has no logic: a tap is `selectTab`, and the rest is reading state.
 
-### Krok 7. Sprawdzenie na żywo
+### Step 7. Check it live
 
-Build w symulatorze, te same akcje przez port 7777, potem palcem: „Zgłoś”, Close, przeciągnięcie arkusza w dół, ponowne stuknięcie Home, przejście Search → Home. Na koniec szybkie pętle i `navigation-race.mjs` z wynikiem 0 na 120.
+A build in the simulator, the same actions over port 7777, then by hand: “Zgłoś”, Close, dragging the sheet down, tapping Home again, going Search → Home. Finally, fast loops and `navigation-race.mjs`, with 0 lost screens in 120.
 
-### Krok 8. Scalenie
+### Step 8. Merge
 
-Commit `dfc6066` na `main`.
+Commit `dfc6066` on `main`.
 
-## 8. Liczby
+## 8. Numbers
 
-Ile trwa jedno okrążenie pętli „zmiana i sprawdzenie” z ekranem i bez niego:
+How long one lap of the change-and-check loop takes, with and without a screen:
 
-| Pomiar | Wynik | Kiedy |
+| Measurement | Result | When |
 | --- | ---: | --- |
-| Jedna podróż bez UI: 12 komend razem ze startem procesu CLI | 13 ms | 10.11.2026 |
-| Wszystkie testy w Node: 14 testów, każdy w osobnym procesie CLI | 0,73 s | 10.11.2026 |
-| `./test` po zmianie jednego pliku w Core: build, 8 testów Swift, 14 testów w Node | 4,6–11 s | 9 i 10.11.2026 |
-| Ta sama zmiana w symulatorze: build, instalacja, start, załadowana lista | 22,4 s | 9.11.2026 |
-| 12 komend na żywej aplikacji przez port 7777 | ok. 99 ms | mediana, 9.11.2026 |
+| One headless journey: 12 commands, including starting the CLI process | 13 ms | 2026-11-10 |
+| All Node tests: 14 tests, each in its own CLI process | 0.73 s | 2026-11-10 |
+| `./test` after changing one file in Core: build, 8 Swift tests, 14 Node tests | 4.6–11 s | 2026-11-09 and 2026-11-10 |
+| The same change in the simulator: build, install, launch, list loaded | 22.4 s | 2026-11-09 |
+| 12 commands against the live app over port 7777 | ~99 ms | median, 2026-11-09 |
 
-Artykuł Shopify podaje kilkaset milisekund bez UI i około 2 s na symulatorze. Tu wychodzi szybciej, bo przykład jest dużo mniejszy. Proporcja się zgadza: bez ekranu pętla jest kilka razy krótsza, a pojedyncza podróż kosztuje milisekundy.
+Shopify's article quotes a few hundred milliseconds headless and about 2 s in the simulator. It is faster here because the example is much smaller. The proportion holds: without a screen the loop is several times shorter, and a single journey costs milliseconds.
 
-## 9. Granice prototypu
+## 9. Limits of the prototype
 
-- W `ls` widać tylko ekran z fokusem. Stanu kontenerów, czyli wybranej zakładki i głębokości stosu, nie widać wprost, tylko pośrednio po nazwie ekranu.
-- Strażnik w `StackView` opiera się na czasie. Cofnięcie ekranu szybciej niż 0,5 s po jego pojawieniu się zostanie zignorowane. Dokładniejszy byłby delegat nawigacji, który zgłasza tylko gesty użytkownika.
-- Serwer na porcie 7777 działa tylko w buildzie Debug i tylko na 127.0.0.1. Z fizycznego iPhone'a trzeba przekierować port.
-- Search, Favorites, Profile i arkusz „Zgłoś” to zaślepki z ikoną i tytułem.
-- Jest tylko iOS. SDK testów przyjmuje ścieżkę do innej binarki (opcja `cli`), więc te same pliki testów mogłyby sterować np. wersją na Androida. Wspólne byłyby testy, a nie kod.
+- `ls` shows only the focused screen. Container state, such as the selected tab and the depth of the stack, is not visible directly, only indirectly through the screen's name.
+- The guard in `StackView` is time-based: popping a screen less than 0.5 s after it appeared is ignored. A navigation delegate that reports only the user's gestures would be more precise.
+- The server on port 7777 runs only in Debug builds and only on 127.0.0.1. A physical iPhone needs port forwarding.
+- Search, Favorites, Profile, and the “Zgłoś” sheet are placeholders with an icon and a title.
+- iOS only. The test SDK accepts a path to another binary (the `cli` option), so the same test files could drive, say, an Android version. What would be shared is the tests, not the code.
 
-## 10. Ściągawka
+## 10. Cheat sheet
 
 ```bash
-./cli                                     # aplikacja bez UI na domyślnych fixturach
+./cli                                     # the headless app on the default fixtures
 ./cli behavior/fixtures/Inventory.stockCount2.json behavior/fixtures/Inventory.saveFails.json
-./test                                    # testy Swift, build CLI, testy w Node
-node --test behavior/tabs.test.mjs        # jeden plik testów
-printf 'ls\n' | nc -w 1 127.0.0.1 7777    # żywa aplikacja (build Debug w symulatorze)
-node behavior/live/navigation-race.mjs    # szybkie podróże na żywo, liczy zgubione ekrany
+./test                                    # Swift tests, CLI build, Node tests
+node --test behavior/tabs.test.mjs        # a single test file
+printf 'ls\n' | nc -w 1 127.0.0.1 7777    # the live app (Debug build in the simulator)
+node behavior/live/navigation-race.mjs    # fast live journeys, counts lost screens
 ```
 
 ---
 
-Opis dotyczy gałęzi `main` w commicie `dfc6066`. Definicja architektury: [Reflex na blogu Shopify Engineering](https://shopify.engineering/reflex). Instrukcja dla agentów pracujących w repozytorium: [`.claude/skills/reflex/SKILL.md`](.claude/skills/reflex/SKILL.md).
+This describes the `main` branch at commit `dfc6066`. The architecture's definition: [Reflex on the Shopify Engineering blog](https://shopify.engineering/reflex). Instructions for agents working in this repository: [`.claude/skills/reflex/SKILL.md`](.claude/skills/reflex/SKILL.md).
